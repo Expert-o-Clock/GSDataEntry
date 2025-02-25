@@ -19,9 +19,7 @@
 
         .was-validated .form-control:invalid {
             border-color: #dc3545;
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e");
-            background-repeat: no-repeat;
-            background-position: right calc(0.375em + 0.1875rem) center;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4[...] background-repeat: no-repeat; background-position: right calc(0.375em + 0.1875rem) center;
             background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
         }
     </style>
@@ -128,29 +126,33 @@
                 loadDropdown("Lists", "A2:A", "workOrderNumber");
             }
 
-            async function loadDropdown(sheet, range, elementId) {
+            function loadDropdown(sheet, range, elementId) {
                 const select = document.getElementById(elementId);
                 select.innerHTML = '<option value="" disabled selected>Loading...</option>';
 
-                try {
-                    const options = await google.script.run
-                        .withFailureHandler(() => [])
-                        .getDropdownOptions(sheet, range);
-
-                    select.innerHTML = options.length
-                        ? options.map(opt => `<option value="${opt}">${opt}</option>`).join('')
-                        : '<option value="" disabled>No WOs available</option>';
-                } catch (error) {
-                    select.innerHTML = '<option value="" disabled>Error loading data</option>';
-                    showToast(`Failed to load Work Orders: ${error.message}`, 'error');
-                }
+                google.script.run
+                    .withSuccessHandler(options => {
+                        if (!options || options.length === 0) {
+                            select.innerHTML = '<option value="" disabled>No options found</option>';
+                            return;
+                        }
+                        select.innerHTML = options.map(opt => `<option value="${opt}">${opt}</option>`).join('');
+                    })
+                    .withFailureHandler(error => {
+                        console.error(error);
+                        select.innerHTML = '<option value="" disabled>Error loading data</option>';
+                        showToast(`Failed to load ${elementId}: ${error.message}`);
+                    })
+                    .getDropdownOptions(sheet, range);
             }
-
 
             async function handleSubmit(e) {
                 e.preventDefault();
                 if (!form.checkValidity()) {
                     form.classList.add('was-validated');
+                    showToast("Please input all required fields.")
+                    await delay(3000);
+                    form.classList.remove('was-validated');
                     return;
                 }
 
@@ -174,7 +176,7 @@
                         .withFailureHandler(error => { throw new Error(error.message) })
                         .submitDailyData(formData);
 
-                    showToast('Daily log submitted successfully!', 'success');
+                    showToast('Daily log submitted!', 'success');
                     form.reset();
                     init();
                 } catch (error) {
@@ -189,10 +191,10 @@
                 const toast = document.createElement('div');
                 toast.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : 'success'}`;
                 toast.innerHTML = `
-              <div class="d-flex small">
-                <div class="toast-body">${message}</div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-              </div>`;
+                      <div class="d-flex small">
+                        <div class="toast-body">${message}</div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                      </div>`;
 
                 toastContainer.appendChild(toast);
                 new bootstrap.Toast(toast, {
@@ -201,14 +203,21 @@
                 }).show();
             }
 
+            function delay(milliseconds) {
+                return new Promise(resolve => {
+                    setTimeout(resolve, milliseconds);
+                });
+            }
+
+            // Event listeners
             document.getElementById('addNewWO').addEventListener('click', () => {
                 google.script.run.showWorkOrderSidebar();
             });
 
-            // Initialize
             form.addEventListener('submit', handleSubmit);
             window.addEventListener('load', init);
         })();
     </script>
 </body>
+</html>
 </html>
