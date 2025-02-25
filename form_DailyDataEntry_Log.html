@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <!-- Bootstrap 5 + Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.9);
+            z-index: 1000;
+            display: none;
+        }
+
+        .was-validated .form-control:invalid {
+            border-color: #dc3545;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right calc(0.375em + 0.1875rem) center;
+            background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+        }
+    </style>
+</head>
+
+<body class="bg-light">
+    <div class="loading-overlay" id="loading">
+        <div class="d-flex justify-content-center align-items-center h-100">
+            <div class="spinner-border text-primary" role="status"></div>
+        </div>
+    </div>
+
+    <div class="container-fluid p-3 mt-2">
+        <form id="daily_logs_form" class="needs-validation" novalidate>
+            <div class="row gx-2 gy-4">
+
+                <!-- Work Order Selection -->
+                <div class="col-7">
+                    <label class="form-label small fw-bold text-muted">WORK ORDER #</label>
+                    <select id="workOrderNumber" class="form-select form-select-sm" required>
+                        <option value="" disabled selected>Loading...</option>
+                    </select>
+                </div>
+                <div class="col-5">
+                    <label class="form-label small fw-bold text-muted">&nbsp;</label>
+                    <button type="button" class="btn btn-primary btn-sm w-100" id="addNewWO">
+                        Add New WO
+                    </button>
+                </div>
+
+                <!-- Financials -->
+                <div class="col-6">
+                    <label class="form-label small fw-bold text-muted">ACTUAL HOURS</label>
+                    <input id="actHours" type="number" class="form-control form-control-sm"
+                           required placeholder="e.g. 100">
+                </div>
+                <div class="col-6">
+                    <label class="form-label small fw-bold text-muted">ACTUAL REVENUE</label>
+                    <input id="actRevenue" type="number" class="form-control form-control-sm"
+                           required placeholder="e.g. 25000">
+                </div>
+
+                <!-- Date -->
+                <div class="col-6">
+                    <label class="form-label small fw-bold text-muted">LOG DATE</label>
+                    <input id="date" type="date" class="form-control form-control-sm" required>
+                </div>
+                <!-- Status -->
+                <div class="col-6">
+                    <label class="form-label small fw-bold text-muted">WO STATUS</label>
+                    <select id="status" class="form-select form-select-sm" required>
+                        <option value="" disabled selected>Select status</option>
+                        <option value="Scheduled">Scheduled</option>
+                        <option value="In Progress" selected="selected">In Progress</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                </div>
+
+                <!-- Checkboxes -->
+                <div class="col-12">
+                    <div class="row g-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="jsaDaily" checked>
+                            <label class="form-check-label" for="jsaDaily">JSA submitted daily?</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="goBacks">
+                            <label class="form-check-label" for="goBacks">Complaints or go-backs?</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="propertyDamage">
+                            <label class="form-check-label" for="propertyDamage">Safety Incident / Property Damage?</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit -->
+                <div class="col-12 mt-5">
+                    <button type="submit" class="btn btn-dark btn-lg w-100">
+                        <i class="bi bi-save me-2"></i>
+                        Submit Daily Log
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        (function () {
+            const form = document.getElementById('daily_logs_form');
+            const toastContainer = document.createElement('div');
+            toastContainer.className = 'toast-container position-fixed bottom-0 start-0 p-2';
+            document.body.appendChild(toastContainer);
+
+            // Initialize
+            function init() {
+                // Set default date
+                const today = new Date();
+                today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+                document.getElementById('date').value = today.toISOString().slice(0, 10);
+
+                // Load WO dropdown
+                loadDropdown("Lists", "A2:A", "workOrderNumber");
+            }
+
+            async function loadDropdown(sheet, range, elementId) {
+                const select = document.getElementById(elementId);
+                select.innerHTML = '<option value="" disabled selected>Loading...</option>';
+
+                try {
+                    const options = await google.script.run
+                        .withFailureHandler(() => [])
+                        .getDropdownOptions(sheet, range);
+
+                    select.innerHTML = options.length
+                        ? options.map(opt => `<option value="${opt}">${opt}</option>`).join('')
+                        : '<option value="" disabled>No WOs available</option>';
+                } catch (error) {
+                    select.innerHTML = '<option value="" disabled>Error loading data</option>';
+                    showToast(`Failed to load Work Orders: ${error.message}`, 'error');
+                }
+            }
+
+
+            async function handleSubmit(e) {
+                e.preventDefault();
+                if (!form.checkValidity()) {
+                    form.classList.add('was-validated');
+                    return;
+                }
+
+                const btn = e.target.querySelector('button[type="submit"]');
+                try {
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="bi bi-hourglass me-2"></i>Submitting...';
+
+                    const formData = {
+                        workOrderNumber: form.workOrderNumber.value,
+                        date: form.date.value,
+                        actRevenue: form.actRevenue.value,
+                        actHours: form.actHours.value,
+                        status: form.status.value,
+                        jsaDaily: form.jsaDaily.checked,
+                        goBacks: form.goBacks.checked,
+                        propertyDamage: form.propertyDamage.checked
+                    };
+
+                    await google.script.run
+                        .withFailureHandler(error => { throw new Error(error.message) })
+                        .submitDailyData(formData);
+
+                    showToast('Daily log submitted successfully!', 'success');
+                    form.reset();
+                    init();
+                } catch (error) {
+                    showToast(error.message || 'Submission failed. Please try again.', 'error');
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-save me-2"></i>Submit Daily Log';
+                }
+            }
+
+            function showToast(message, type = 'error') {
+                const toast = document.createElement('div');
+                toast.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : 'success'}`;
+                toast.innerHTML = `
+              <div class="d-flex small">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+              </div>`;
+
+                toastContainer.appendChild(toast);
+                new bootstrap.Toast(toast, {
+                    autohide: true,
+                    delay: 3000
+                }).show();
+            }
+
+            document.getElementById('addNewWO').addEventListener('click', () => {
+                google.script.run.showWorkOrderSidebar();
+            });
+
+            // Initialize
+            form.addEventListener('submit', handleSubmit);
+            window.addEventListener('load', init);
+        })();
+    </script>
+</body>
+</html>
